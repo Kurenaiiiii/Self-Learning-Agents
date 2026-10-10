@@ -1,0 +1,27 @@
+name: Bug report
+description: Report something broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Steps to reproduce, expected vs actual behavior.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Python version, provider type (no keys!), OS.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (redacted)
+      description: Paste JSON logs with any secrets removed.

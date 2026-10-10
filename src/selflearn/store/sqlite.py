@@ -25,7 +25,9 @@ class MemoryStore:
             parent = os.path.dirname(os.path.abspath(path))
             os.makedirs(parent, exist_ok=True)
         self.path = path
-        self._conn = sqlite3.connect(path)
+        # check_same_thread=False: the REST server answers each request on a
+        # worker thread sharing this connection; writes stay serialized by commit.
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         migrate(self._conn, now=utcnow())
 

@@ -41,7 +41,8 @@ One interface, three providers, stdlib-only core.
 ## Demo (real model, real recall + correction)
 
 Real transcript, model `openai/gpt-oss-20b` through an OpenAI-compatible
-endpoint, 2026-10-10, temperature 0 (lightly formatted; full text verbatim):
+endpoint, 2026-10-10, temperature 0 (assistant turns trimmed with … for length,
+user turns and final answer verbatim):
 
 ```
 you> Hi! I just moved from Berlin to Lisbon. I drink oat milk latte every morning.

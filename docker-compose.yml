@@ -1,0 +1,20 @@
+services:
+  selflearn:
+    build: .
+    ports:
+      - "${SELFLEARN_PORT:-8000}:8000"
+    environment:
+      SELFLEARN_PROVIDER: "${SELFLEARN_PROVIDER:-openai_compatible}"
+      SELFLEARN_BASE_URL: "${SELFLEARN_BASE_URL:-}"
+      SELFLEARN_MODEL: "${SELFLEARN_MODEL:-}"
+      SELFLEARN_API_TOKEN: "${SELFLEARN_API_TOKEN:-}"
+      SELFLEARN_CORS_ORIGINS: "${SELFLEARN_CORS_ORIGINS:-}"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - selflearn-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  selflearn-data:

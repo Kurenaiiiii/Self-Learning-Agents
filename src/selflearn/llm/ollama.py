@@ -65,6 +65,7 @@ class OllamaProvider(LLMProvider):
         self,
         *,
         base_url: str = "http://localhost:11434",
+        api_key: str = "",
         timeout_s: float = 120.0,
         max_retries: int = 3,
     ) -> None:
@@ -73,7 +74,7 @@ class OllamaProvider(LLMProvider):
         self._compat: OpenAICompatibleProvider | None = None
         if self.base_url.endswith("/v1"):
             # ponytail: reuse compat stack for Ollama's OpenAI endpoint.
-            self._compat = OpenAICompatibleProvider(base_url=self.base_url)
+            self._compat = OpenAICompatibleProvider(base_url=self.base_url, api_key=api_key)
 
     def _chat_url(self) -> str:
         return f"{self.base_url}/api/chat"

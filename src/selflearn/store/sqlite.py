@@ -31,6 +31,11 @@ class MemoryStore:
         self._conn.row_factory = sqlite3.Row
         migrate(self._conn, now=utcnow())
 
+    def clone_into(self, other: MemoryStore) -> None:
+        """Copy all rows (incl. history, supersede links) into another store."""
+        self._conn.commit()
+        self._conn.backup(other._conn)
+
     def close(self) -> None:
         """Close the connection."""
         self._conn.close()

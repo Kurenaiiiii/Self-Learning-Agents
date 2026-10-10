@@ -77,6 +77,7 @@ class BenchConfig:
     limit: int = 0  # 0 = all scenarios
     throttle_s: float = 1.0
     cache_dir: str = ""
+    learn_cache_dir: str = ""  # learned stores reused across strategies/runs
     judge: bool = False
     max_answer_tokens: int = 256
 
@@ -90,14 +91,24 @@ def _transcript(scn: Scenario) -> str:
 
 
 def learn_scenario(
-    llm: LLMProvider, *, model: str, store: MemoryStore, user: str, scn: Scenario
+    llm: LLMProvider,
+    *,
+    model: str,
+    store: MemoryStore,
+    user: str,
+    scn: Scenario,
+    throttle_s: float = 0.0,
 ) -> None:
     """Extraction + consolidation per session into a fresh namespaced store."""
     for i, session in enumerate(scn.sessions):
         text = "\n".join(f"{r}: {t}" for r, t in session)
         for cand in extract_memories(llm, model=model, conversation=text)[:5]:
+            if throttle_s > 0:
+                time.sleep(throttle_s)
             existing = store.list(user=user, namespace=scn.id, include_superseded=True)
             result = consolidate_candidate(llm, model=model, candidate=cand, existing=existing)
+            if throttle_s > 0:
+                time.sleep(throttle_s)
             if result.action == "NOOP":
                 continue
             if result.action == "UPDATE" and result.target_id:
@@ -166,6 +177,49 @@ def _judge(llm: LLMProvider, *, model: str, question: Question, answer: str) -> 
         return None
 
 
+def _learned_path(learn_dir: str, scn_id: str, run: int) -> str:
+    safe = "".join(c for c in scn_id if c.isalnum() or c in "-_")
+    return f"{learn_dir}/{safe}_r{run}.db"
+
+
+def _load_or_learn_store(
+    llm: LLMProvider,
+    *,
+    model: str,
+    scn: Scenario,
+    run: int,
+    bench: BenchConfig,
+    user: str,
+) -> MemoryStore:
+    """Learn once per (scenario, run); reuse the sqlite file across strategies."""
+    import os as _os
+
+    if bench.learn_cache_dir:
+        _os.makedirs(bench.learn_cache_dir, exist_ok=True)
+        path = _learned_path(bench.learn_cache_dir, scn.id, run)
+        if _os.path.exists(path):
+            disk = MemoryStore(path)
+            try:
+                fresh = MemoryStore(":memory:")
+                disk.clone_into(fresh)
+                return fresh
+            finally:
+                disk.close()
+        store = MemoryStore(":memory:")
+        learn_scenario(
+            llm, model=model, store=store, user=user, scn=scn, throttle_s=bench.throttle_s
+        )
+        disk = MemoryStore(path)
+        try:
+            store.clone_into(disk)
+        finally:
+            disk.close()
+        return store
+    store = MemoryStore(":memory:")
+    learn_scenario(llm, model=model, store=store, user=user, scn=scn)
+    return store
+
+
 def run_scenario(
     llm: LLMProvider,
     *,
@@ -178,9 +232,13 @@ def run_scenario(
 ) -> list[AnswerRecord]:
     """Learn (memory strategies) then answer each question. One strategy x run."""
     store = MemoryStore(":memory:")
+    learned: MemoryStore | None = None
     try:
         if strategy in MEMORY_STRATEGIES:
-            learn_scenario(llm, model=model, store=store, user=user, scn=scn)
+            learned = _load_or_learn_store(
+                llm, model=model, scn=scn, run=run, bench=bench, user=user
+            )
+            learned.clone_into(store)
         summary_text = ""
         if strategy == "summary_only":
             rs = RollingSummary(max_tokens=600, keep_last_turns=4)
@@ -239,6 +297,8 @@ def run_scenario(
         return records
     finally:
         store.close()
+        if learned is not None:
+            learned.close()
 
 
 def _pick_scenarios(bench: BenchConfig) -> list[Scenario]:

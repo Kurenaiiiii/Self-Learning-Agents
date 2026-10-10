@@ -50,6 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     e = sub.add_parser("eval", help="run the memory benchmark")
     e.add_argument("--config-name", default="hybrid", help="memory strategy to evaluate")
+    e.add_argument("--strategies", default=None, help="comma list (overrides --config-name)")
+    e.add_argument("--categories", default=None, help="comma list of categories")
+    e.add_argument("--limit", type=int, default=0, help="max scenarios (0 = all)")
+    e.add_argument("--throttle", type=float, default=1.0, help="seconds between LLM calls")
+    e.add_argument("--cache-dir", default=None, help="response + learned-store cache dir")
     e.add_argument("--scenarios", default=None, help="scenario file (else built-in)")
     e.add_argument("--runs", type=int, default=3)
     e.add_argument("--out", default=None, help="results JSON file")
@@ -137,13 +142,36 @@ def cmd_memories(cfg: Config, args: argparse.Namespace) -> int:
 
 def cmd_eval(cfg: Config, args: argparse.Namespace) -> int:
     """Run the benchmark harness."""
-    from selflearn.bench import STRATEGIES, run_benchmark
+    from selflearn.bench import CATEGORIES, STRATEGIES, BenchConfig, run_benchmark
 
     if args.list_strategies:
         print("strategies:", ", ".join(sorted(STRATEGIES)))
         return 0
+    strategies = (
+        tuple(s.strip() for s in args.strategies.split(",") if s.strip())
+        if args.strategies
+        else (args.config_name,)
+    )
+    categories = (
+        tuple(c.strip() for c in args.categories.split(",") if c.strip())
+        if args.categories
+        else CATEGORIES
+    )
+    bench = BenchConfig(
+        strategies=strategies,
+        runs=args.runs,
+        categories=categories,
+        limit=args.limit,
+        throttle_s=args.throttle,
+        cache_dir=args.cache_dir or "",
+        learn_cache_dir=f"{args.cache_dir}/learn" if args.cache_dir else "",
+    )
     report = run_benchmark(
-        cfg, strategy=args.config_name, runs=args.runs, scenarios_path=args.scenarios
+        cfg,
+        strategy=args.config_name,
+        runs=args.runs,
+        scenarios_path=args.scenarios,
+        bench=bench,
     )
     text = json.dumps(report, indent=2)
     if args.out:

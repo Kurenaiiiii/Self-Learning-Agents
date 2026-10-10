@@ -59,6 +59,9 @@ def apply_consolidation(
     ctx: ToolContext, *, candidate: CandidateMemory, result: ConsolidationResult
 ) -> str:
     """Write a consolidation outcome to the store. Returns the memory id or ''."""
+    from selflearn.memory.privacy import redact_candidate  # local import: avoid cycle
+
+    candidate = redact_candidate(candidate)
     if result.action == "NOOP":
         return result.target_id
     if result.action == "UPDATE" and result.target_id:
@@ -106,8 +109,13 @@ def execute_tool_call(ctx: ToolContext, call: ToolCall) -> str:
             importance = 0.5
         if not text.strip():
             return "saved nothing: empty text"
+        from selflearn.memory.privacy import redact_text  # local import: avoid cycle
+
         candidate = CandidateMemory(
-            type=mtype, text=text.strip(), importance=importance, source="tool"
+            type=mtype,
+            text=redact_text(text.strip()),
+            importance=importance,
+            source="tool",
         )
         existing = ctx.store.list(user=ctx.user, namespace=ctx.namespace, include_superseded=True)
         if ctx.llm is not None and ctx.model:

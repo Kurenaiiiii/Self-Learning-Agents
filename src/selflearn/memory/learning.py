@@ -101,16 +101,19 @@ def apply_forgetting(
 def save_lessons(
     store: MemoryStore, *, user: str, lessons: list[CandidateMemory], namespace: str = "default"
 ) -> list[Memory]:
-    """Persist validated lesson candidates."""
+    """Persist validated lesson candidates (redacted)."""
+    from selflearn.memory.privacy import redact_candidate  # local import: avoid cycle
+
     saved: list[Memory] = []
     for lesson in lessons:
+        clean = redact_candidate(lesson)
         try:
             saved.append(
                 store.create(
                     user=user,
                     type="lesson",
-                    text=lesson.text,
-                    importance=lesson.importance,
+                    text=clean.text,
+                    importance=clean.importance,
                     source="reflection",
                     namespace=namespace,
                 )

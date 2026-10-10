@@ -15,6 +15,13 @@ from selflearn.memory.learning import (
     reflect_session,
     save_lessons,
 )
+from selflearn.memory.privacy import (
+    enforce_retention,
+    export_user_json,
+    forget_me,
+    redact_candidate,
+    redact_text,
+)
 from selflearn.memory.retrieval import (
     DEFAULT_WEIGHTS,
     RankedMemory,
@@ -33,13 +40,18 @@ __all__ = [
     "apply_forgetting",
     "consolidate_candidate",
     "decide",
+    "enforce_retention",
     "estimate_tokens",
     "exact_duplicate",
+    "export_user_json",
     "extract_memories",
     "find_similar",
+    "forget_me",
     "near_duplicate",
     "parse_extraction_output",
     "recency_score",
+    "redact_candidate",
+    "redact_text",
     "reflect_session",
     "save_lessons",
 ]

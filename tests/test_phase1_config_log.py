@@ -14,6 +14,9 @@ def test_config_rejects_unknown_provider() -> None:
 
 
 def test_load_config_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: object) -> None:
+    from pathlib import Path
+
+    monkeypatch.chdir(Path(str(tmp_path)))  # isolate from the developer's real .env
     for var in (
         "SELFLEARN_PROVIDER",
         "SELFLEARN_BASE_URL",

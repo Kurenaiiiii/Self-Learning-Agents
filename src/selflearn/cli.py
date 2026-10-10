@@ -6,6 +6,8 @@ import argparse
 import sys
 
 from selflearn import __version__
+from selflearn.config import load_config
+from selflearn.doctor import run_doctor
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,6 +27,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.version:
         print(__version__)
+        return 0
+    if args.cmd == "doctor":
+        print(run_doctor(load_config()))
         return 0
     print("selflearn: skeleton CLI (full commands arrive in later phases).")
     print("Run `selflearn --help` for usage.")

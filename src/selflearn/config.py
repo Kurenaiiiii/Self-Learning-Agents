@@ -48,8 +48,7 @@ class Config:
     def __post_init__(self) -> None:
         if self.provider not in VALID_PROVIDERS:
             raise ValueError(
-                f"Unknown provider {self.provider!r}. "
-                f"Choose from: {', '.join(VALID_PROVIDERS)}"
+                f"Unknown provider {self.provider!r}. Choose from: {', '.join(VALID_PROVIDERS)}"
             )
         if self.timeout_s <= 0:
             raise ValueError("timeout_s must be positive")

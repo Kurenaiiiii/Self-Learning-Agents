@@ -9,6 +9,12 @@ from selflearn.memory.consolidation import (
     near_duplicate,
 )
 from selflearn.memory.extraction import CandidateMemory, extract_memories, parse_extraction_output
+from selflearn.memory.learning import (
+    apply_feedback,
+    apply_forgetting,
+    reflect_session,
+    save_lessons,
+)
 from selflearn.memory.retrieval import (
     DEFAULT_WEIGHTS,
     RankedMemory,
@@ -23,6 +29,8 @@ __all__ = [
     "DEFAULT_WEIGHTS",
     "RankedMemory",
     "Retriever",
+    "apply_feedback",
+    "apply_forgetting",
     "consolidate_candidate",
     "decide",
     "estimate_tokens",
@@ -32,4 +40,6 @@ __all__ = [
     "near_duplicate",
     "parse_extraction_output",
     "recency_score",
+    "reflect_session",
+    "save_lessons",
 ]

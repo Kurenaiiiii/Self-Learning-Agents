@@ -79,7 +79,7 @@ class BenchConfig:
     cache_dir: str = ""
     learn_cache_dir: str = ""  # learned stores reused across strategies/runs
     judge: bool = False
-    max_answer_tokens: int = 256
+    max_answer_tokens: int = 128
 
 
 def _transcript(scn: Scenario) -> str:

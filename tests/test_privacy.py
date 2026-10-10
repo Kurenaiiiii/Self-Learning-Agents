@@ -30,7 +30,7 @@ def test_redact_key_patterns() -> None:
     cases = [
         "key is sk-abcDEF123456789",
         "anthropic sk-ant-xyz1234567890 here",
-        "groq gsk_abc1234567890xyz",
+        "token gsk_abc1234567890xyz here",
         "Authorization: Bearer tokengoeshere123",
         "api_key=supersecretvalue9",
         "aws AKIAIOSFODNN7EXAMPLE key",

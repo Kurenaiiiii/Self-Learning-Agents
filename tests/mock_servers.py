@@ -149,6 +149,13 @@ class OpenAIMockHandler(BaseHTTPRequestHandler):
         headers, body = _read_json(self)
         self.mock.requests.append({"path": self.path, "headers": headers, "body": body})
         behavior = self.mock.next_behavior()
+        if self.path.endswith("/embeddings"):
+            if not isinstance(body.get("input"), list) or not body.get("model"):
+                _send_error(self, 400, {"error": {"message": "bad input/model"}})
+                return
+            vecs = [[0.1 * (i + 1), 0.2 * (i + 1), 0.3] for i in range(len(body["input"]))]
+            _send(self, 200, {"data": [{"embedding": v, "index": i} for i, v in enumerate(vecs)]})
+            return
         if not self.path.endswith("chat/completions"):
             _send_error(
                 self, 404, {"error": {"message": "not found", "type": "invalid_request_error"}}
@@ -394,6 +401,13 @@ class OllamaMockHandler(BaseHTTPRequestHandler):
         headers, body = _read_json(self)
         self.mock.requests.append({"path": self.path, "headers": headers, "body": body})
         behavior = self.mock.next_behavior()
+        if self.path == "/api/embed":
+            if not isinstance(body.get("input"), list) or not body.get("model"):
+                _send(self, 400, {"error": "bad input/model"})
+                return
+            vecs = [[0.5, 0.1 * (i + 1)] for i in range(len(body["input"]))]
+            _send(self, 200, {"embeddings": vecs})
+            return
         if self.path != "/api/chat":
             _send(self, 404, {"error": "not found"})
             return

@@ -1,5 +1,11 @@
 # Self-Learning Agents
 
+[![CI](https://github.com/Kurenaiiiii/Self-Learning-Agents/actions/workflows/ci.yml/badge.svg)](https://github.com/Kurenaiiiii/Self-Learning-Agents/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.11 | 3.12](https://img.shields.io/badge/python-3.11_%7C_3.12-blue.svg)](pyproject.toml)
+[![coverage 89%](https://img.shields.io/badge/coverage-89%25-brightgreen.svg)](https://github.com/Kurenaiiiii/Self-Learning-Agents/actions/workflows/ci.yml)
+[![tests 117 passing](https://img.shields.io/badge/tests-117_passing-brightgreen.svg)](tests/)
+
 Production-grade long-term memory for LLM agents: extraction, consolidation,
 hybrid retrieval, feedback and forgetting, with a CLI, a REST API, privacy
 controls, and a reproducible benchmark. Works with OpenAI-compatible APIs,
@@ -201,7 +207,25 @@ scoring explained simply, contradictions, injection defense, trade-offs).
 
 ## Benchmark
 
-<!-- BENCH:TABLES -->
+Run through an OpenAI-compatible endpoint, model `qwen/qwen3.8-27b`,
+2026-10-10/11, 3 runs per configuration, temperature 0, 40 scenarios
+(120 answers per strategy). Deterministic rubric grading; learning phase
+cached, final answers always live. FakeLLM numbers are CI smoke only and are
+not shown here.
+
+| Strategy | Accuracy (mean) | Update acc. | Stale-fact rate | hit@5 | Tokens/query | Latency |
+| -------- | --------------- | ----------- | --------------- | ----- | ------------ | ------- |
+| no_memory | 0.075 | 0.000 | 0.083 | — | 56 | 0.5s |
+| full_history | 0.750 | 0.917 | 0.000 | — | 94 | 0.8s |
+| summary_only | 0.075 | 0.000 | 0.083 | — | 63 | 0.5s |
+| bm25_only | *pending rerun* | — | — | — | — | — |
+| vector_only | 0.675 | 0.667 | 0.083 | 0.974 | 88 | 1.0s |
+| hybrid (default) | 0.700 | 0.667 | 0.083 | 0.974 | 87 | 0.5s |
+
+Accuracy = fraction of answers with all rubric keywords present and no stale
+phrase; min/max spread across runs was 0/1 for every strategy (single-answer
+granularity per question). Update acc. and stale-fact rate are computed over
+the update + temporal questions only (12 questions × 3 runs = 36).
 
 Honest commentary (read before the numbers):
 

@@ -1,23 +1,26 @@
-"""Benchmark harness (full implementation lands with the scenarios)."""
+"""Benchmark: reproducible memory measurement with labeled reports."""
 
-from __future__ import annotations
+from selflearn.bench.grading import Grade, grade_answer, normalize
+from selflearn.bench.harness import BenchConfig, run_benchmark, run_scenario
+from selflearn.bench.scenarios import CATEGORIES, SCENARIOS
 
-from typing import Any
+STRATEGIES = (
+    "no_memory",
+    "full_history",
+    "summary_only",
+    "bm25_only",
+    "vector_only",
+    "hybrid",
+)
 
-from selflearn.config import Config
-
-STRATEGIES = ("no_memory", "full_history", "summary_only", "bm25_only", "vector_only", "hybrid")
-
-
-def run_benchmark(
-    cfg: Config,
-    *,
-    strategy: str = "hybrid",
-    runs: int = 3,
-    scenarios_path: str | None = None,
-) -> dict[str, Any]:
-    """Run the benchmark (implemented in the benchmark phase)."""
-    raise NotImplementedError("benchmark harness not implemented yet")
-
-
-__all__ = ["STRATEGIES", "run_benchmark"]
+__all__ = [
+    "CATEGORIES",
+    "SCENARIOS",
+    "STRATEGIES",
+    "BenchConfig",
+    "Grade",
+    "grade_answer",
+    "normalize",
+    "run_benchmark",
+    "run_scenario",
+]

@@ -12,6 +12,7 @@ from selflearn.embeddings import (
     OllamaEmbedder,
     OpenAICompatEmbedder,
     char_ngrams,
+    gram_cosine,
     tokenize,
 )
 from tests.mock_servers import MockServer, OllamaMockHandler, OpenAIMockHandler
@@ -89,6 +90,14 @@ def test_ngram_vector_normalized() -> None:
     vec = idx.vector("some query text")
     assert len(vec) == 512
     assert math.sqrt(sum(v * v for v in vec)) == pytest.approx(1.0)
+
+
+def test_gram_cosine_pairwise() -> None:
+    """Pairwise TF cosine: no IDF, so near-identical strings score high."""
+    assert gram_cosine("lives in lisbon", "lives in lisbon") == pytest.approx(1.0)
+    assert gram_cosine("lives in lisbon!", "lives in  lisbon") > 0.7
+    assert gram_cosine("likes chess", "lives in lisbon") < 0.4
+    assert gram_cosine("", "x") == 0.0
 
 
 def test_retrieval_quality_both_indexes() -> None:

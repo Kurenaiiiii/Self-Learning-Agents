@@ -35,6 +35,21 @@ def _hash_bucket(term: str, buckets: int) -> int:
     return int.from_bytes(digest[:4], "little") % buckets
 
 
+def gram_cosine(a: str, b: str, *, buckets: int = 512, n_min: int = 3, n_max: int = 5) -> float:
+    """Pairwise TF cosine over hashed char n-grams. No IDF: for dedup, not ranking."""
+    ca: Counter[int] = Counter()
+    for gram in char_ngrams(a, n_min=n_min, n_max=n_max):
+        ca[_hash_bucket(gram, buckets)] += 1
+    cb: Counter[int] = Counter()
+    for gram in char_ngrams(b, n_min=n_min, n_max=n_max):
+        cb[_hash_bucket(gram, buckets)] += 1
+    if not ca or not cb:
+        return 0.0
+    dot = sum(tf * cb.get(bucket, 0) for bucket, tf in ca.items())
+    denom = math.sqrt(sum(tf * tf for tf in ca.values()) * sum(tf * tf for tf in cb.values()))
+    return dot / denom if denom > 0 else 0.0
+
+
 class Bm25Index:
     """Okapi BM25 over word tokens. Incremental: add docs, then score."""
 

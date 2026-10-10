@@ -172,6 +172,7 @@ def cmd_eval(cfg: Config, args: argparse.Namespace) -> int:
         runs=args.runs,
         scenarios_path=args.scenarios,
         bench=bench,
+        progress=lambda s, r, scn: print(f"[{s} run{r}] {scn}", file=sys.stderr, flush=True),
     )
     text = json.dumps(report, indent=2)
     if args.out:

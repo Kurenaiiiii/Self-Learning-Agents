@@ -18,7 +18,7 @@ from selflearn.embeddings import OllamaEmbedder, OpenAICompatEmbedder
 from selflearn.llm.cache import DiskCache
 from selflearn.llm.fake import FakeLLM
 from selflearn.llm.ollama import OllamaProvider
-from selflearn.llm.types import ServerError
+from selflearn.llm.types import LLMError, ServerError
 from selflearn.server import create_app
 from selflearn.store import MemoryStore
 from tests.mock_servers import MockServer, OpenAIMockHandler
@@ -94,7 +94,7 @@ def test_embedder_server_error() -> None:
     try:
         emb = OpenAICompatEmbedder(base_url=srv.base_url + "/v1", api_key="k", model="m")
         srv.behaviors = ["ok"]  # embeddings endpoint ignores behavior queue; force via bad input
-        with pytest.raises(Exception):  # noqa: BLE001, PT011 - any typed error
+        with pytest.raises(LLMError):
             OllamaEmbedder(base_url="http://127.0.0.1:1", model="m").embed(["a"])
         assert emb.embed(["a"])[0]
     finally:

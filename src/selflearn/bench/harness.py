@@ -100,7 +100,7 @@ def learn_scenario(
     throttle_s: float = 0.0,
 ) -> None:
     """Extraction + consolidation per session into a fresh namespaced store."""
-    for i, session in enumerate(scn.sessions):
+    for session in scn.sessions:
         text = "\n".join(f"{r}: {t}" for r, t in session)
         for cand in extract_memories(llm, model=model, conversation=text)[:5]:
             if throttle_s > 0:

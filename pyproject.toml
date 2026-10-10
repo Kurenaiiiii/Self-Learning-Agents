@@ -7,7 +7,7 @@ name = "selflearn"
 version = "0.1.0"
 description = "Production-grade long-term memory for LLM agents"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Self-Learning Agents contributors" }]
 keywords = ["ai-agents", "llm", "long-term-memory", "agent-memory", "rag"]
@@ -40,14 +40,14 @@ selflearn = "selflearn.cli:main"
 where = ["src"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "W"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

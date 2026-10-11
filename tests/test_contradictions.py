@@ -60,8 +60,10 @@ def test_casual_contradiction_supersedes(
     assert contradicts(candidate_text, existing_text)
     llm = FakeLLM()
     res = consolidate_candidate(
-        llm, model="m",
-        candidate=CandidateMemory("fact", candidate_text, 0.6), existing=existing,
+        llm,
+        model="m",
+        candidate=CandidateMemory("fact", candidate_text, 0.6),
+        existing=existing,
     )
     assert res.action == "SUPERSEDE", candidate_text
     assert res.target_id == mem.id
@@ -69,24 +71,35 @@ def test_casual_contradiction_supersedes(
 
 
 @pytest.mark.parametrize("existing_text,candidate_text", NON_CONTRADICTIONS)
-def test_no_false_supersede(
-    store: MemoryStore, existing_text: str, candidate_text: str
-) -> None:
+def test_no_false_supersede(store: MemoryStore, existing_text: str, candidate_text: str) -> None:
     store.create(user="u", type="fact", text=existing_text)
     existing = store.list(user="u", include_superseded=True)
     assert not contradicts(candidate_text, existing_text)
     llm = FakeLLM(['{"action": "ADD", "target_id": "", "reason": "new"}'])
     res = consolidate_candidate(
-        llm, model="m",
-        candidate=CandidateMemory("fact", candidate_text, 0.5), existing=existing,
+        llm,
+        model="m",
+        candidate=CandidateMemory("fact", candidate_text, 0.5),
+        existing=existing,
     )
     assert res.action == "ADD"
     assert llm.calls == 1  # fell through to the LLM as designed
 
 
 def test_is_correction_cues() -> None:
-    for cue in ("actually x", "correction: y", "update: z", "switched to b",
-                "moved from a", "no longer", "my mistake", "i meant q",
-                "scratch that", "rather late", "not Berlin", "oops here"):
+    for cue in (
+        "actually x",
+        "correction: y",
+        "update: z",
+        "switched to b",
+        "moved from a",
+        "no longer",
+        "my mistake",
+        "i meant q",
+        "scratch that",
+        "rather late",
+        "not Berlin",
+        "oops here",
+    ):
         assert is_correction(cue), cue
     assert not is_correction("user drinks oat latte every morning")

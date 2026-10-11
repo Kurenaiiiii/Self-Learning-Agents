@@ -218,7 +218,7 @@ not shown here.
 | no_memory | 0.075 | 0.000 | 0.083 | — | 56 | 0.5s |
 | full_history | 0.750 | 0.917 | 0.000 | — | 94 | 0.8s |
 | summary_only | 0.075 | 0.000 | 0.083 | — | 63 | 0.5s |
-| bm25_only | *pending rerun* | — | — | — | — | — |
+| bm25_only | 0.700 | 0.667 | 0.083 | 0.974 | 87 | 0.3s |
 | vector_only | 0.675 | 0.667 | 0.083 | 0.974 | 88 | 1.0s |
 | hybrid (default) | 0.700 | 0.667 | 0.083 | 0.974 | 87 | 0.5s |
 
@@ -233,6 +233,12 @@ Honest commentary (read before the numbers):
   narrows on preference questions answerable from the question alone.
 - `full_history` is competitive on short scenarios but costs far more tokens
   per query and degrades with distractors; it cannot scale past the window.
+- `summary_only` scores like no-memory here: the short synthetic sessions
+  never exceed the summarization threshold, so it answers from an empty
+  summary. It is a control for long histories, not a contender on this suite.
+- BM25-only, vector-only, and hybrid tie within noise (0.675–0.700); the
+  hybrid's value is robustness across query types (exact terms vs paraphrase),
+  not a headline gap on these crisp synthetic facts.
 - The main failure mode is consolidation missing casual contradictions (see
   demo note): the stale row survives and retrieval must outrank it. Explicit
   "Update: X" phrasing links correctly far more often.

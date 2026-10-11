@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from selflearn.bench import BenchConfig, grade_answer
-from selflearn.bench.harness import run_benchmark
+from selflearn.bench import ALL_SCENARIOS, LONG_SCENARIOS, BenchConfig, grade_answer, history_bucket
+from selflearn.bench.harness import _history_within_budget, run_benchmark
 from selflearn.bench.scenarios import CATEGORIES, SCENARIOS
 from selflearn.config import Config
 from selflearn.llm.fake import FakeLLM
+from selflearn.memory.retrieval import estimate_tokens
 
 
 def test_scenario_count_and_categories() -> None:
@@ -39,3 +40,27 @@ def test_benchmark_smoke_fake() -> None:
     assert report["meta"]["scenarios"] == 2
     for row in report["rows"]:
         assert {"correct", "hit", "prompt_tokens", "latency_s"} <= set(row)
+
+
+def test_long_scenarios_shape() -> None:
+    """16 long histories: 30+ sessions, ~8k+ tokens, chatter flagged skip_learn."""
+    assert len(LONG_SCENARIOS) >= 15
+    assert len(ALL_SCENARIOS) == len(SCENARIOS) + len(LONG_SCENARIOS)
+    for scn in LONG_SCENARIOS:
+        assert len(scn.sessions) >= 30, scn.id
+        total = estimate_tokens("\n".join(f"{r}: {t}" for s in scn.sessions for r, t in s))
+        assert total >= 8000, (scn.id, total)
+        learned = [i for i in range(len(scn.sessions)) if i not in scn.skip_learn]
+        assert 1 <= len(learned) <= 6, (scn.id, learned)  # only fact sessions learned
+        assert scn.questions and all(q.keywords for q in scn.questions)
+
+
+def test_long_history_truncates_oldest() -> None:
+    scn = LONG_SCENARIOS[0]
+    full, cut = _history_within_budget(scn, max_tokens=8000)
+    assert cut is True  # planted facts at the front must fall out of budget
+    short, cut_short = _history_within_budget(SCENARIOS[0], max_tokens=8000)
+    assert cut_short is False and "Lisbon" in short
+    assert history_bucket(100) == "short"
+    assert history_bucket(5000) == "mid"
+    assert history_bucket(9000) == "long"

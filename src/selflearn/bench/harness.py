@@ -15,7 +15,7 @@ from typing import Any
 
 from selflearn.agent.summary import RollingSummary
 from selflearn.bench.grading import Grade, grade_answer
-from selflearn.bench.scenarios import CATEGORIES, SCENARIOS, Question, Scenario
+from selflearn.bench.scenarios import ALL_SCENARIOS, CATEGORIES, Question, Scenario
 from selflearn.config import Config
 from selflearn.llm.base import LLMProvider
 from selflearn.llm.cache import DiskCache
@@ -64,6 +64,7 @@ class AnswerRecord:
     latency_s: float
     answer: str = ""
     judge: bool | None = None
+    history_tokens: int = 0
 
 
 @dataclass
@@ -80,6 +81,23 @@ class BenchConfig:
     learn_cache_dir: str = ""  # learned stores reused across strategies/runs
     judge: bool = False
     max_answer_tokens: int = 128
+    max_history_tokens: int = 8000
+    """Context budget for full_history stuffing.
+
+    Histories longer than this are truncated from the OLDEST session forward
+    (a real context window drops old content the same way). Memory strategies
+    are unaffected: they retrieve into a separate fixed budget instead.
+    Documented in docs/ARCHITECTURE.md and the README benchmark section.
+    """
+
+
+def history_bucket(history_tokens: int) -> str:
+    """Bucket for history-length analysis: short <2k, mid 2-8k, long >8k."""
+    if history_tokens < 2000:
+        return "short"
+    if history_tokens <= 8000:
+        return "mid"
+    return "long"
 
 
 def _transcript(scn: Scenario) -> str:
@@ -88,6 +106,28 @@ def _transcript(scn: Scenario) -> str:
         for role, text in session:
             lines.append(f"{role}: {text}")
     return "\n".join(lines)
+
+
+def _history_within_budget(scn: Scenario, *, max_tokens: int) -> tuple[str, bool]:
+    """Oldest-first truncation of the transcript to a token budget.
+
+    Returns (text, truncated). Whole sessions are dropped from the front;
+    the newest session always survives (char-truncated if it alone exceeds).
+    """
+    from selflearn.memory.retrieval import estimate_tokens
+
+    sessions = list(scn.sessions)
+    while (
+        len(sessions) > 1
+        and estimate_tokens("\n".join(f"{r}: {t}" for s in sessions for r, t in s)) > max_tokens
+    ):
+        sessions.pop(0)
+    text = "\n".join(f"{r}: {t}" for s in sessions for r, t in s)
+    truncated = len(sessions) < len(scn.sessions)
+    if estimate_tokens(text) > max_tokens:
+        keep = max_tokens * 4
+        text, truncated = text[-keep:], True
+    return text, truncated
 
 
 def learn_scenario(
@@ -99,8 +139,14 @@ def learn_scenario(
     scn: Scenario,
     throttle_s: float = 0.0,
 ) -> None:
-    """Extraction + consolidation per session into a fresh namespaced store."""
-    for session in scn.sessions:
+    """Extraction + consolidation per session into a fresh namespaced store.
+
+    Sessions flagged in scn.skip_learn (pure chatter) are skipped: extraction
+    on filler costs a model call and yields nothing.
+    """
+    for idx, session in enumerate(scn.sessions):
+        if idx in scn.skip_learn:
+            continue
         text = "\n".join(f"{r}: {t}" for r, t in session)
         for cand in extract_memories(llm, model=model, conversation=text)[:5]:
             if throttle_s > 0:
@@ -237,6 +283,9 @@ def run_scenario(
     across runs must stay live so run-to-run spread is honest.
     """
     live = answer_llm or llm
+    from selflearn.memory.retrieval import estimate_tokens as _est
+
+    history_tokens = _est(_transcript(scn))
     store = MemoryStore(":memory:")
     learned: MemoryStore | None = None
     try:
@@ -257,7 +306,8 @@ def run_scenario(
             if strategy == "no_memory":
                 system = "Answer briefly from the question alone."
             elif strategy == "full_history":
-                system = f"Conversation history:\n{_transcript(scn)}\nAnswer briefly."
+                history, _cut = _history_within_budget(scn, max_tokens=bench.max_history_tokens)
+                system = f"Conversation history:\n{history}\nAnswer briefly."
             elif strategy == "summary_only":
                 system = f"Summary:\n{summary_text}\nAnswer briefly."
             else:
@@ -296,6 +346,7 @@ def run_scenario(
                     latency_s=round(latency, 2),
                     answer=text,
                     judge=judge,
+                    history_tokens=history_tokens,
                 )
             )
             if bench.throttle_s > 0:
@@ -308,7 +359,7 @@ def run_scenario(
 
 
 def _pick_scenarios(bench: BenchConfig) -> list[Scenario]:
-    selected = [s for s in SCENARIOS if s.category in bench.categories]
+    selected = [s for s in ALL_SCENARIOS if s.category in bench.categories]
     return selected[: bench.limit] if bench.limit > 0 else selected
 
 
@@ -397,6 +448,8 @@ def build_report(
                 "latency_s": r.latency_s,
                 "answer": r.answer[:500],
                 "judge": r.judge,
+                "history_tokens": r.history_tokens,
+                "bucket": history_bucket(r.history_tokens),
             }
         )
     summary: dict[str, Any] = {}
@@ -419,6 +472,7 @@ def build_report(
             "hit_at_5": round(sum(1 for h in hits if h) / len(hits), 3) if hits else None,
             "tokens_mean": round(statistics.fmean(toks), 1) if toks else 0.0,
             "latency_mean_s": round(statistics.fmean(lats), 2) if lats else 0.0,
+            "by_bucket": _by_bucket(group),
         }
     label = "CI smoke only" if model == "fake" else "real model"
     return {
@@ -430,12 +484,30 @@ def build_report(
             "temperature": options.temperature,
             "judge_mode": "llm-judge" if options.judge else "deterministic",
             "cache": bool(options.cache_dir),
+            "max_history_tokens": options.max_history_tokens,
             "label": label,
             "scenarios": len({r.scenario for r in records}),
         },
         "summary": summary,
         "rows": rows,
     }
+
+
+def _by_bucket(group: list[AnswerRecord]) -> dict[str, dict[str, float | int]]:
+    """Accuracy and tokens per query by history-length bucket."""
+    out: dict[str, dict[str, float | int]] = {}
+    for bucket in ("short", "mid", "long"):
+        cell = [r for r in group if history_bucket(r.history_tokens) == bucket]
+        if not cell:
+            continue
+        acc = [1.0 if r.grade.correct else 0.0 for r in cell]
+        toks = [r.prompt_tokens + r.completion_tokens for r in cell]
+        out[bucket] = {
+            "n": len(cell),
+            "accuracy_mean": round(statistics.fmean(acc), 3),
+            "tokens_mean": round(statistics.fmean(toks), 1),
+        }
+    return out
 
 
 def _is_update(record: AnswerRecord) -> bool:

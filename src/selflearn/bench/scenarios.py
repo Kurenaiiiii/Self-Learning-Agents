@@ -1,4 +1,9 @@
-"""40 synthetic multi-session scenarios with planted facts and rubric grading."""
+"""56 synthetic multi-session scenarios with planted facts and rubric grading.
+
+40 short scenarios plus 16 long-history scenarios (30+ sessions, ~9k tokens
+of history) where facts planted early must survive chatter, corrections, and
+distractors. Long histories are deterministic (fixed rotation, no randomness).
+"""
 
 from __future__ import annotations
 
@@ -25,6 +30,13 @@ class Scenario:
     category: str
     sessions: tuple[tuple[Turn, ...], ...]
     questions: tuple[Question, ...] = field(default_factory=tuple)
+    skip_learn: tuple[int, ...] = ()
+    """Session indices excluded from memory learning (pure chatter).
+
+    Documented rationale: extraction on pure chatter costs a model call and
+    yields nothing, so the harness skips those sessions. All sessions still
+    count toward history size (what full_history stuffing must fit).
+    """
 
 
 def _u(text: str) -> Turn:
@@ -532,4 +544,315 @@ SCENARIOS: tuple[Scenario, ...] = (
 
 CATEGORIES = ("recall", "update", "preference", "multihop", "temporal", "distractor", "longgap")
 
-__all__ = ["CATEGORIES", "Question", "SCENARIOS", "Scenario"]
+__all__ = ["CATEGORIES", "LONG_SCENARIOS", "Question", "SCENARIOS", "Scenario"]
+
+
+# -- long-history scenarios (16): 32 sessions, ~9k tokens each -------------------
+# Facts planted in sessions 0-2, correction/second fact near session 12,
+# distractor facts and chatter everywhere else. Chatter sessions are flagged
+# skip_learn (pure filler, no model calls spent on them).
+
+_FILLER_TOPICS: tuple[tuple[str, str], ...] = (
+    (
+        "The forecast says rain all weekend, typical for this time of year.",
+        "Rain again? Maybe a good weekend for indoor plans.",
+    ),
+    (
+        "I finally organized the bookshelf alphabetically by author.",
+        "That must have taken a while. How many books?",
+    ),
+    (
+        "Traffic on the ring road was terrible this morning.",
+        "Rush hour is the worst. Did you take an alternate route?",
+    ),
+    (
+        "I tried a new pasta recipe with roasted tomatoes and basil.",
+        "Sounds delicious. Did it turn out well?",
+    ),
+    (
+        "My phone battery barely lasts until lunch these days.",
+        "Might be time for a battery replacement.",
+    ),
+    (
+        "I started watching a documentary series about deep sea creatures.",
+        "The anglerfish episode is wild, right?",
+    ),
+    (
+        "The office coffee machine broke down again yesterday.",
+        "Third time this month. Someone should fix it properly.",
+    ),
+    ("I need to buy birthday candles and wrapping paper soon.", "Any big celebration coming up?"),
+    (
+        "My houseplants are thriving since I moved them near the window.",
+        "Light makes all the difference.",
+    ),
+    (
+        "I read an article about urban beekeeping on rooftops.",
+        "Fascinating hobby. Would you ever try it?",
+    ),
+    (
+        "The new park downtown opened with a big playground.",
+        "I heard the running track there is nice too.",
+    ),
+    ("I finally fixed the squeaky door hinge with some oil.", "Small repairs are so satisfying."),
+    (
+        "Gas prices went up again, I noticed at the station.",
+        "Everything keeps getting more expensive.",
+    ),
+    (
+        "I am thinking of repainting the bedroom a soft green.",
+        "Sage green is calming. Good choice.",
+    ),
+    (
+        "My neighbor is learning to play the trumpet, loudly.",
+        "Earplugs might be a good investment.",
+    ),
+    ("I saw a great meteor shower last night around 2am.", "Lucky! The sky was cloudy here."),
+)
+
+_DISTRACTOR_FACTS: tuple[tuple[str, str], ...] = (
+    ("My cousin Paulo is a dentist in Porto.", "Porto is a lovely city."),
+    ("I own a blue bicycle I ride to the market.", "Market trips by bike sound fun."),
+    ("My favorite season is autumn, I love the colors.", "Autumn light is the best."),
+    ("I water the garden every Sunday morning.", "A solid routine."),
+    ("My grandfather collected old stamps from Asia.", "What a collection that must be."),
+    ("I take the bus line 12 to get downtown.", "Reliable route?"),
+    ("My laptop is four years old and still fine.", "Good mileage out of it."),
+    ("I bake sourdough bread almost every weekend.", "The crust must be great."),
+)
+
+
+def _long_chatter(session_idx: int) -> tuple[Turn, ...]:
+    """8-turn filler session, deterministic rotation by session index."""
+    turns: list[Turn] = []
+    for k in range(6):
+        topic = _FILLER_TOPICS[(session_idx * 3 + k) % len(_FILLER_TOPICS)]
+        turns.append(_u(topic[0]))
+        turns.append(_a(topic[1]))
+    d = _DISTRACTOR_FACTS[session_idx % len(_DISTRACTOR_FACTS)]
+    turns.append(_u(d[0]))
+    turns.append(_a(d[1]))
+    return tuple(turns)
+
+
+def _build_long(
+    scn_id: str,
+    category: str,
+    early: tuple[tuple[Turn, ...], ...],
+    mid: tuple[Turn, ...],
+    question: Question,
+    *,
+    n_sessions: int = 48,
+    mid_at: int = 18,
+) -> Scenario:
+    """Assemble a long scenario: early facts, mid correction, chatter around."""
+    sessions: list[tuple[Turn, ...]] = []
+    skip: list[int] = []
+    for i in range(n_sessions):
+        if i < len(early):
+            sessions.append(early[i])
+        elif i == mid_at:
+            sessions.append(mid)
+        else:
+            sessions.append(_long_chatter(i))
+            skip.append(i)
+    return Scenario(scn_id, category, tuple(sessions), (question,), tuple(skip))
+
+
+LONG_SCENARIOS: tuple[Scenario, ...] = (
+    _build_long(
+        "long-recall-01",
+        "recall",
+        (
+            (_u("I live in Lisbon, in the Alfama district."), _a("Alfama, noted.")),
+            (_u("My apartment overlooks the Tagus river."), _a("What a view.")),
+        ),
+        (_u("Still in Alfama, love it here."), _a("Glad to hear it.")),
+        Question("Which district do I live in?", ("alfama",), gold=("alfama",)),
+    ),
+    _build_long(
+        "long-recall-02",
+        "recall",
+        (
+            (_u("My daughter is called Ines and she is seven."), _a("Hi Ines.")),
+            (_u("Ines plays the violin after school."), _a("Lovely instrument.")),
+        ),
+        (_u("Ines has a violin recital soon."), _a("Break a leg to her.")),
+        Question("What is my daughter called?", ("ines",), gold=("ines",)),
+    ),
+    _build_long(
+        "long-recall-03",
+        "recall",
+        (
+            (_u("I am a marine biologist studying octopuses."), _a("Fascinating field.")),
+            (_u("My lab is at the oceanography institute."), _a("Great workplace.")),
+        ),
+        (_u("The octopus project got extended."), _a("Good news.")),
+        Question("What do I study?", ("octopus", "marine"), gold=("octopus",)),
+    ),
+    _build_long(
+        "long-recall-04",
+        "recall",
+        (
+            (_u("I am allergic to bee stings, I carry an epi-pen."), _a("Stay safe.")),
+            (_u("It happened once on a hiking trip."), _a("Scary experience.")),
+        ),
+        (_u("Checked: epi-pen still valid."), _a("Good.")),
+        Question("What am I allergic to?", ("bee",), gold=("bee",)),
+    ),
+    _build_long(
+        "long-update-01",
+        "update",
+        (
+            (_u("I live in Berlin."), _a("Berlin, got it.")),
+            (_u("Been in Berlin for five years now."), _a("Quite a while.")),
+        ),
+        (
+            _u("Update: I actually moved from Berlin to Lisbon last month, not Berlin anymore."),
+            _a("Lisbon now, updated."),
+        ),
+        Question("Where do I live?", ("lisbon",), ("berlin",), ("lisbon",)),
+    ),
+    _build_long(
+        "long-update-02",
+        "update",
+        (
+            (_u("I drive a red Honda Civic."), _a("Nice car.")),
+            (_u("The Honda just passed inspection."), _a("Good.")),
+        ),
+        (
+            _u("Correction: I sold the Honda and bought a blue Tesla, not a Honda anymore."),
+            _a("Big upgrade."),
+        ),
+        Question("What car do I drive now?", ("tesla",), ("honda",), ("tesla",)),
+    ),
+    _build_long(
+        "long-update-03",
+        "update",
+        (
+            (_u("I work as a frontend developer."), _a("Cool.")),
+            (_u("Mostly React and TypeScript work."), _a("Solid stack.")),
+        ),
+        (
+            _u("I changed roles and now work as a backend engineer instead of frontend."),
+            _a("Congrats."),
+        ),
+        Question("What is my current role?", ("backend",), ("frontend",), ("backend",)),
+    ),
+    _build_long(
+        "long-update-04",
+        "update",
+        (
+            (_u("I drink regular cow milk daily."), _a("Noted.")),
+            (_u("Always cow milk in coffee."), _a("Okay.")),
+        ),
+        (
+            _u("I switched to oat milk; cow milk upsets my stomach now, no more cow milk."),
+            _a("Oat milk it is."),
+        ),
+        Question("What milk do I drink?", ("oat",), ("cow milk",), ("oat",)),
+    ),
+    _build_long(
+        "long-dist-01",
+        "distractor",
+        (
+            (_u("I live in Valencia."), _a("Noted.")),
+            (_u("Valencia has great paella."), _a("So I hear.")),
+        ),
+        (
+            _u("My brother lives in Berlin, my aunt in Madrid, colleagues in Paris and Rome."),
+            _a("Spread out family."),
+        ),
+        Question(
+            "Where do I live?", ("valencia",), ("berlin", "madrid", "paris", "rome"), ("valencia",)
+        ),
+    ),
+    _build_long(
+        "long-dist-02",
+        "distractor",
+        (
+            (_u("I drink barley tea every evening."), _a("Noted.")),
+            (_u("Barley tea helps me sleep."), _a("Good habit.")),
+        ),
+        (
+            _u("At work everyone drinks espresso, cola, wine, and smoothies all day."),
+            _a("Quite the menu."),
+        ),
+        Question(
+            "What do I drink in the evening?",
+            ("barley",),
+            ("espresso", "cola", "wine", "smoothies"),
+            ("barley",),
+        ),
+    ),
+    _build_long(
+        "long-dist-03",
+        "distractor",
+        (
+            (_u("My cat is called Miso."), _a("Cute name.")),
+            (_u("Miso is a grey tabby cat."), _a("Adorable.")),
+        ),
+        (
+            _u("The shelter also has dogs named Rex and Luna, plus a parrot called Kiko."),
+            _a("Full house there."),
+        ),
+        Question("What is my cat called?", ("miso",), ("rex", "luna", "kiko"), ("miso",)),
+    ),
+    _build_long(
+        "long-dist-04",
+        "distractor",
+        (
+            (_u("I write Go for a living."), _a("Nice.")),
+            (_u("Go concurrency suits my work."), _a("Indeed.")),
+        ),
+        (_u("Friends use Rust, Java, Haskell, and Elixir for their jobs."), _a("Eclectic circle.")),
+        Question(
+            "Which language do I write for a living?",
+            ("go",),
+            ("rust", "java", "haskell", "elixir"),
+            ("go",),
+        ),
+    ),
+    _build_long(
+        "long-gap-01",
+        "longgap",
+        (
+            (_u("My passport expires in June 2027."), _a("Plenty of time.")),
+            (_u("I keep the passport in the desk drawer."), _a("Safe spot.")),
+        ),
+        (_u("Renewal paperwork takes months."), _a("Start early.")),
+        Question("When does my passport expire?", ("june 2027", "2027"), (), ("passport",)),
+    ),
+    _build_long(
+        "long-gap-02",
+        "longgap",
+        (
+            (_u("My piano needs tuning every spring."), _a("Noted.")),
+            (_u("It is an old upright piano."), _a("Charming.")),
+        ),
+        (_u("The tuner moved away last year."), _a("Need a new one.")),
+        Question("When does my piano need tuning?", ("spring",), (), ("piano", "tuning")),
+    ),
+    _build_long(
+        "long-gap-03",
+        "longgap",
+        (
+            (_u("I take magnesium before bed."), _a("Good habit.")),
+            (_u("It helps my sleep quality."), _a("Great.")),
+        ),
+        (_u("Pharmacy was out of stock once."), _a("Annoying.")),
+        Question("What do I take before bed?", ("magnesium",), (), ("magnesium",)),
+    ),
+    _build_long(
+        "long-gap-04",
+        "longgap",
+        (
+            (_u("My ferry pass renews each April."), _a("Noted, April.")),
+            (_u("I commute by ferry daily."), _a("Scenic commute.")),
+        ),
+        (_u("Ferry prices rose this year."), _a("Everything rises.")),
+        Question("When does my ferry pass renew?", ("april",), (), ("ferry",)),
+    ),
+)
+
+ALL_SCENARIOS: tuple[Scenario, ...] = SCENARIOS + LONG_SCENARIOS

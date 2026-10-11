@@ -157,7 +157,17 @@ facts, adds corrections and chatter, then asks questions graded by
 deterministic rubric matching (all keywords present, stale phrases absent).
 Six strategies compete: no memory, full history, summary only, BM25 only,
 vector only, hybrid. Temperature 0, ≥3 runs, mean + spread, cached learning
-phase, live answers, throttled calls.
+phase, live answers, throttled calls. The suite has 40 short scenarios plus
+16 long-history scenarios (48 sessions, ~8.7k tokens each).
+
+Context limit (configurable, default 8000 estimated tokens): full-history
+stuffing truncates the transcript from the OLDEST session forward, exactly
+like a real context window dropping old content. On long histories the
+planted facts fall out of budget — which is precisely what the memory layer
+is for. Memory strategies are unaffected: they retrieve into their own fixed
+800-token budget instead. Reports carry per-row history sizes and aggregate
+accuracy and tokens-per-query by history-length bucket (short <2k, mid 2–8k,
+long >8k).
 
 Honest pitfalls, stated upfront:
 

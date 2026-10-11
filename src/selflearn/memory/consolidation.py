@@ -25,12 +25,100 @@ CONSOLIDATION_PROMPT = (
     "For the CANDIDATE memory and EXISTING memories, pick one action.\n"
     "- NOOP: candidate adds nothing (duplicate, trivial, chit-chat).\n"
     "- UPDATE: same fact with more detail; give target_id to update.\n"
-    "- SUPERSEDE: candidate contradicts an existing memory "
-    "(e.g. moved cities); give target_id. Old stays in history.\n"
+    "- SUPERSEDE: candidate contradicts an existing memory; give target_id. "
+    "Old stays in history. Contradiction = same subject and relation with a "
+    "different value (other city, other drink, other job). Correction cues "
+    "like 'actually', 'not X', 'correction', 'I meant', 'moved from', "
+    "'switched to', 'no longer' almost always mean SUPERSEDE the memory "
+    "they argue with.\n"
     "- ADD: genuinely new information.\n"
+    "Examples: existing 'lives in Berlin' + candidate 'lives in Lisbon' -> "
+    "SUPERSEDE. Existing 'drinks cow milk' + candidate 'actually drinks oat "
+    "milk, not cow milk' -> SUPERSEDE. Existing 'uses VS Code' + candidate "
+    "'uses VS Code with vim plugin' -> UPDATE.\n"
     'Reply with ONLY strict JSON: {"action": "ADD|UPDATE|SUPERSEDE|NOOP", '
     '"target_id": "<id or empty>", "reason": "<short>"}'
 )
+
+# Correction cues: user explicitly revises a previous statement.
+CORRECTION_CUES = (
+    r"actually|correction|update\b|changed|instead|switched to|moved from|"
+    r"not\b|never\b|no longer|was wrong|my mistake|i meant|"
+    r"scratch that|rather\b|now\b|oops\b|dropped|quit\b|stopped"
+)
+_CUE_RE = re.compile(rf"\b(?:{CORRECTION_CUES})", re.IGNORECASE)
+
+# Strong cues name the replacement outright; one shared anchor suffices.
+_STRONG_CUES = ("instead", "switched to", "moved from", "correction", "scratch that")
+_STRONG_RE = re.compile(
+    r"\b(?:instead|switched to|moved from|correction|scratch that)", re.IGNORECASE
+)
+
+# Words whose object the candidate rejects or abandons ("not Berlin",
+# "instead of cow milk", "tea over coffee", "dropped Spanish").
+_NEGATION_RES = (
+    re.compile(r"\bnot\s+(?:a|an|the)?\s*([a-z0-9]+)", re.IGNORECASE),
+    re.compile(r"\bno\s+longer\s+(?:a|an|the)?\s*([a-z0-9]+)", re.IGNORECASE),
+    re.compile(r"\binstead\s+of\s+(?:a|an|the)?\s*([a-z0-9]+)", re.IGNORECASE),
+    re.compile(r"\bover\s+(?:a|an|the)?\s*([a-z0-9]+)", re.IGNORECASE),
+    re.compile(
+        r"\b(?:dropped|quit|stopped|abandoned)\s+(?:a|an|the)?\s*([a-z0-9]+)", re.IGNORECASE
+    ),
+)
+
+_STOPWORDS = frozenset(
+    "the a an i you he she it we they user my your his her its our their "
+    "is are was were be been being do does did and or but in on at to of "
+    "for with from by as that this these those it s t m d ll re ve".split()
+)
+
+
+def _content_tokens(text: str) -> set[str]:
+    return {t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in _STOPWORDS}
+
+
+def is_correction(text: str) -> bool:
+    """Whether the text carries an explicit correction cue."""
+    return _CUE_RE.search(text) is not None
+
+
+def contradicts(candidate_text: str, existing_text: str) -> bool:
+    """Same subject+relation with a different value, signaled by a cue.
+
+    Requires a correction cue plus a shared anchor (2 content tokens, or 1
+    for strong cues that name the replacement), plus evidence of a changed
+    value: distinctive tokens on both sides, or the candidate explicitly
+    negating/abandoning a token from the existing memory ("not Berlin",
+    "instead of cow milk", "dropped Spanish"). Conservative: no cue, no fire.
+    """
+    if not is_correction(candidate_text):
+        return False
+    cand, exist = _content_tokens(candidate_text), _content_tokens(existing_text)
+    anchor = cand & exist
+    need = 1 if _STRONG_RE.search(candidate_text) else 2
+    if len(anchor) < need:
+        return False
+    only_cand = {t for t in cand - exist if len(t) > 2}
+    only_exist = {t for t in exist - cand if len(t) > 2}
+    if only_cand and only_exist:
+        return True
+    # Candidate absorbs the old value ("X, not Y"): check it rejects a token
+    # that the existing memory asserts.
+    for rx in _NEGATION_RES:
+        for match in rx.finditer(candidate_text):
+            if match.group(1).lower() in exist:
+                return True
+    return False
+
+
+def find_contradiction(candidate: CandidateMemory, existing: list[Memory]) -> Memory | None:
+    """First similar existing memory the candidate explicitly corrects."""
+    if not is_correction(candidate.text):
+        return None
+    for mem in find_similar(candidate, existing, top_k=5):
+        if contradicts(candidate.text, mem.text):
+            return mem
+    return None
 
 
 @dataclass(frozen=True)
@@ -161,6 +249,11 @@ def consolidate_candidate(
     dup = near_duplicate(candidate, existing)
     if dup is not None:
         return ConsolidationResult(action="NOOP", target_id=dup.id, reason="near duplicate")
+    contra = find_contradiction(candidate, existing)
+    if contra is not None:
+        return ConsolidationResult(
+            action="SUPERSEDE", target_id=contra.id, reason="explicit correction of same fact"
+        )
     similar = find_similar(candidate, existing)
     return decide(llm, model=model, candidate=candidate, similar=similar, temperature=temperature)
 
@@ -168,8 +261,11 @@ def consolidate_candidate(
 __all__ = [
     "ConsolidationResult",
     "consolidate_candidate",
+    "contradicts",
     "decide",
     "exact_duplicate",
+    "find_contradiction",
     "find_similar",
+    "is_correction",
     "near_duplicate",
 ]
